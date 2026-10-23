@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "orderflow.fullname" . }}-worker
+  labels:
+    {{- include "labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  schedule: {{ .Values.worker.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "orderflow.componentSelector" (dict "root" . "component" "worker") | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "orderflow.serviceAccountName" (dict "root" . "component" "worker" "create" true) }}
+          containers:
+            - name: worker
+              # FLAW CKS-SUP-001 / HELM-VAL-002: hard-coded ":latest", bypassing orderflow.image and values.
+              image: ghcr.io/example/orderflow-worker:latest
+              args: ["reconcile-orders", "--cluster", {{ .Values.cluster.name | quote }}]
+              envFrom:
+                - configMapRef:
+                    name: {{ include "orderflow.fullname" . }}-config

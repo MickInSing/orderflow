@@ -1,0 +1,74 @@
+# The "bad" workload. Every FLAW comment is something the visualiser flags.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orderflow.fullname" . }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- /* DEMO 5 (flow control): with an HPA, don't set replicas, or every sync fights the autoscaler. */}}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "orderflow.componentSelector" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orderflow.componentSelector" (dict "root" . "component" "api") | nindent 8 }}
+      annotations:
+        {{- /* DEMO 8: restart the pods when the ConfigMap changes (sha256 of the rendered template). */}}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- /* FLAW CKS-SA-001: no automountServiceAccountToken: false, so the API token is mounted. */}}
+      serviceAccountName: {{ include "orderflow.serviceAccountName" (dict "root" . "component" "api" "create" true) }}
+      {{- /* FLAW CKS-POD-002..007: no pod or container securityContext (compare the frontend). */}}
+      containers:
+        - name: api
+          image: {{ include "orderflow.image" (dict "root" . "image" .Values.api.image) | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+          env:
+            {{- include "orderflow.env" .Values.api.env | trim | nindent 12 }}
+            {{- /* FLAW CKS-SEC-001: a password as a plain env value. */}}
+            - name: DB_PASSWORD
+              value: {{ .Values.database.password | quote }}
+            - name: REDIS_HOST
+              value: {{ printf "%s-redis-lite" .Release.Name | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "orderflow.fullname" . }}-config
+          {{- /* FLAW LRN-PERF-004: liveness is a copy of readiness. A slow DB makes Kubernetes restart healthy pods. */}}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+        {{- with .Values.api.logShipper }}
+        {{- if .enabled }}
+        {{- /* DEMO 5 (with): inside `with`, "." is .Values.api.logShipper. Use $ for the root. */}}
+        - name: log-shipper
+          image: "fluent/fluent-bit:3.1"
+          securityContext:
+            privileged: true            # FLAW CKS-POD-001
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+          env:
+            - name: RELEASE
+              value: {{ $.Release.Name | quote }}
+        {{- end }}
+        {{- end }}
+      {{- if .Values.api.logShipper.enabled }}
+      volumes:
+        - name: varlog
+          hostPath:                     # FLAW CKS-HOST-002
+            path: /var/log
+      {{- end }}

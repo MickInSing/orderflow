@@ -1,0 +1,5 @@
+# What the ArgoCD Application injects per cluster (valuesObject / parameters).
+# Load this in the visualiser (Values → value files) to get past the `required` check.
+cluster:
+  name: demo-cluster-sg1
+  environment: staging

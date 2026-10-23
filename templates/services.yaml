@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orderflow.fullname" . }}-frontend
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orderflow.fullname" . }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  {{- /* FLAW K8S-NET-001: LoadBalancer by default. values-prod.yaml sets ClusterIP. */}}
+  type: {{ .Values.api.service.type }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+  selector:
+    {{- include "orderflow.componentSelector" (dict "root" . "component" "api") | nindent 4 }}

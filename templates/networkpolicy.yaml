@@ -1,0 +1,45 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "orderflow.fullname" . }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "orderflow.componentSelector" (dict "root" . "component" "api") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 14 }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: http
+  egress:
+    - to:   # DNS
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+    - to:   # Redis subchart
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis-lite
+      ports:
+        - { port: 6379, protocol: TCP }
+    {{- if .Values.networkPolicy.allowDatabase }}
+    - to:   # Postgres (CloudNativePG pods)
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "orderflow.fullname" . }}-db
+      ports:
+        - { port: 5432, protocol: TCP }
+    {{- end }}
+{{- end }}

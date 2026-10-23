@@ -1,0 +1,22 @@
+orderflow {{ .Chart.AppVersion }} is installed as "{{ .Release.Name }}" in namespace {{ .Release.Namespace }}
+on cluster {{ .Values.cluster.name }} ({{ .Values.cluster.environment }}).
+
+{{- if .Values.ingress.enabled }}
+
+Open: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- if not .Values.ingress.tls }}
+WARNING: the Ingress has no TLS. Set ingress.tls=true outside dev.
+{{- end }}
+{{- else }}
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "orderflow.fullname" . }}-frontend 8080:80
+{{- end }}
+
+{{- if eq .Values.api.service.type "LoadBalancer" }}
+
+The API also has a public load balancer. Get its address with:
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "orderflow.fullname" . }}-api -w
+{{- end }}
+
+Database: CloudNativePG cluster {{ include "orderflow.fullname" . }}-db ({{ .Values.database.instances }} instance{{ if gt (int .Values.database.instances) 1 }}s{{ end }}).
+Run the smoke test: helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

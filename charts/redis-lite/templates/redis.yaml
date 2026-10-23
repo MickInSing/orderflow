@@ -1,0 +1,62 @@
+{{- $registry := .Values.global.imageRegistry | default "" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "redis-lite.fullname" . }}
+  labels:
+    {{- include "redis-lite.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "redis-lite.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "redis-lite.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: "{{ if $registry }}{{ $registry }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args: ["--save", "", "--appendonly", "no"]   # cache only: no persistence on purpose
+          ports:
+            - name: redis
+              containerPort: {{ .Values.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: redis }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - { name: data, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "redis-lite.fullname" . }}
+  labels:
+    {{- include "redis-lite.selectorLabels" . | nindent 4 }}
+spec:
+  ports:
+    - name: redis
+      port: {{ .Values.port }}
+      targetPort: redis
+  selector:
+    {{- include "redis-lite.selectorLabels" . | nindent 4 }}

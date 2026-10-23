@@ -1,0 +1,97 @@
+# orderflow demo values. Each "DEMO n" marker matches a step in DEMO.md.
+# "FLAW <rule>" marks something the visualiser should flag.
+
+# DEMO 2 (globals): .Values.global is shared with every subchart (redis-lite reads it too).
+global:
+  imageRegistry: ""          # e.g. registry.internal:5000 for an air-gapped cluster
+
+# DEMO 1 (values from ArgoCD): cluster.name is REQUIRED and has no default.
+# Without it the render fails on purpose; the visualiser asks for it (or load values-argocd.yaml).
+cluster:
+  name: ""
+  environment: dev
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------- frontend (the "good" workload)
+frontend:
+  replicas: 2
+  image:
+    repository: nginxinc/nginx-unprivileged
+    tag: "1.27-alpine"
+  port: 8080
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 64Mi }
+
+# ---------------------------------------------------------------- api (the "bad" workload)
+api:
+  replicas: 3                # FLAW LRN-PERF-003 (+ K8S-AVAIL-001 if autoscaling is off): no PDB, no spread
+  image:
+    repository: ghcr.io/example/orderflow-api
+    tag: ""                  # empty = the chart's appVersion (see orderflow.image in _helpers.tpl)
+  port: 8000
+  service:
+    type: LoadBalancer       # FLAW K8S-NET-001: public cloud load balancer for an internal API
+  resources:                 # FLAW K8S-RES-001 / LRN-PERF-002: no requests, but the HPA scales on CPU
+    limits: { memory: 512Mi }
+  env:                       # DEMO 6 (range over a map): rendered by orderflow.env
+    LOG_LEVEL: info
+    FEATURE_NEW_CART: "true"
+    WORKERS: 4
+  logShipper:
+    enabled: true            # FLAW CKS-POD-001 / CKS-HOST-002: privileged sidecar with a hostPath
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPU: 70
+
+# ---------------------------------------------------------------- worker (CronJob)
+worker:
+  schedule: "*/15 * * * *"
+  clusterWide: true          # FLAW LRN-SEC-001: binds the worker to cluster-admin
+
+# ---------------------------------------------------------------- data
+database:
+  name: orders
+  user: orders
+  password: "SuperSecret123!"   # FLAW LRN-SEC-005 / CKS-SEC-001 / LRN-SEC-006: literal password
+  sslmode: disable              # FLAW LRN-SEC-013: TLS to Postgres switched off
+  instances: 1                  # FLAW LRN-PERF-006: one instance, no backups, superuser on
+  storage: 5Gi
+
+# DEMO 2 (subcharts): values for a subchart go under its name. `enabled` is the Chart.yaml condition;
+# everything else overrides charts/redis-lite/values.yaml.
+redis-lite:
+  enabled: true
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { memory: 96Mi }
+
+notifications:
+  smtpHost: smtp.example.com
+  smtpPassword: "mailpass-2024"   # FLAW LRN-SEC-004: ends up in a ConfigMap (see configmap.yaml)
+
+auth:
+  jwtSecret: "change-me-jwt"    # FLAW LRN-SEC-005 / CKS-SEC-002: secret committed in values
+
+# ---------------------------------------------------------------- edge
+ingress:
+  enabled: true
+  className: nginx
+  host: orders.example.com
+  tls: false                    # FLAW CKS-NET-002: plain HTTP
+
+networkPolicy:
+  enabled: false                # FLAW CKS-NET-001: off by default (values-prod.yaml turns it on)
+  allowDatabase: true           # prod sets false to show a blocked connection in the Pods view
+
+metrics:
+  serviceMonitor: true          # DEMO 9 (.Capabilities): only rendered if the CRD exists
+
+# FLAW HELM-VAL-001: nothing reads this any more (leftover from an old feature)
+featureFlags:
+  legacyCheckout: true

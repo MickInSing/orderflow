@@ -1,0 +1,20 @@
+{{- /*
+DEMO 9 (.Capabilities): only render the ServiceMonitor if the Prometheus Operator CRD is installed.
+`helm template` (and ArgoCD without --api-versions) doesn't know the cluster's APIs, so this is
+skipped. The visualiser shows it as an external dependency.
+*/ -}}
+{{- if and .Values.metrics.serviceMonitor (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "orderflow.fullname" . }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "orderflow.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+{{- end }}

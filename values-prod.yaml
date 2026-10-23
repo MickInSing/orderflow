@@ -1,0 +1,14 @@
+# Production overrides. Shows "With values" differences and a NetworkPolicy that blocks Postgres.
+cluster:
+  name: prod-cluster-sg1
+  environment: prod
+ingress:
+  tls: true
+api:
+  service:
+    type: ClusterIP
+networkPolicy:
+  enabled: true
+  allowDatabase: false          # DEMO 11: someone forgot 5432, so the Pods view shows API → DB "blocked"
+database:
+  instances: 3

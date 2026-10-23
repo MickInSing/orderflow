@@ -1,0 +1,68 @@
+{{- /* DEMO 3: validation runs first. A missing cluster.name stops the whole render here. */ -}}
+{{- include "orderflow.validate" . }}
+# The "good" workload: compare it with api-deployment.yaml in the visualiser.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orderflow.fullname" . }}-frontend
+  labels:
+    {{- include "labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "orderflow.serviceAccountName" (dict "root" . "component" "frontend" "create" true) }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 14 }}
+      containers:
+        - name: nginx
+          image: {{ include "orderflow.image" (dict "root" . "image" .Values.frontend.image) | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.port }}
+          securityContext:
+            {{- include "orderflow.securityContext" . | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: cache, mountPath: /var/cache/nginx }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: cache, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orderflow.fullname" . }}-frontend
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "orderflow.componentSelector" (dict "root" . "component" "frontend") | nindent 6 }}

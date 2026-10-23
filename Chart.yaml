@@ -1,0 +1,19 @@
+apiVersion: v2
+name: orderflow
+description: >-
+  Demo chart for the Helm visualiser. A small order system (frontend, API, worker, Postgres, Redis)
+  that covers the Chart Template Guide topics, with deliberate flaws for the visualiser to find.
+  See DEMO.md for the walkthrough. NOT for production.
+type: application
+version: 0.4.0
+appVersion: "2.4.1"
+keywords: [demo, helm-visualiser]
+maintainers:
+  - name: platform-team
+dependencies:
+  # DEMO (subcharts & globals): a vendored local subchart, switched on/off by a condition.
+  # FLAW HELM-DEP-001: there is no Chart.lock, so builds aren't reproducible.
+  - name: redis-lite
+    version: 0.1.0
+    repository: file://charts/redis-lite
+    condition: redis-lite.enabled

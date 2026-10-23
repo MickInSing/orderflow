@@ -1,0 +1,24 @@
+{{- if .Values.autoscaling.enabled }}
+# FLAW K8S-API-001: autoscaling/v2beta2 was removed in Kubernetes 1.26. Use autoscaling/v2.
+# FLAW LRN-PERF-002: scales on CPU %, but the API container has no CPU request to measure against.
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "orderflow.fullname" . }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "orderflow.fullname" . }}-api
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPU }}
+{{- end }}

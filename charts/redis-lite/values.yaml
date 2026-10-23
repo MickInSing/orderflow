@@ -1,0 +1,9 @@
+# Subchart defaults. The parent overrides these under its `redis-lite:` key,
+# and .Values.global comes from the parent's `global:`.
+image:
+  repository: redis
+  tag: "7.4-alpine"
+port: 6379
+resources:
+  requests: { cpu: 25m, memory: 64Mi }
+  limits: { memory: 128Mi }

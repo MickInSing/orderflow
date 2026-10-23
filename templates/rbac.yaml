@@ -1,0 +1,66 @@
+{{- $fullname := include "orderflow.fullname" . }}
+# DEMO 4 (variables): $fullname is computed once and reused, including inside range/with blocks.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-frontend
+  labels:
+    {{- include "labels" . | nindent 4 }}
+automountServiceAccountToken: false
+{{- range $component := list "api" "worker" }}
+---
+# FLAW CKS-SA-003: these ServiceAccounts leave token automount on by default.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-{{ $component }}
+  labels:
+    {{- include "labels" $ | nindent 4 }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]   # FLAW CKS-RBAC-002: the API can read every Secret in the namespace
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["*"]                          # FLAW CKS-RBAC-001: wildcard verbs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-api
+  labels:
+    {{- include "labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-api
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullname }}-api
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.worker.clusterWide }}
+---
+# FLAW LRN-SEC-001: "it needs to list nodes", so someone gave it cluster-admin.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullname }}-worker
+  labels:
+    {{- include "labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullname }}-worker
+    namespace: {{ .Release.Namespace }}
+{{- end }}

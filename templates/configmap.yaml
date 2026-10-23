@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "orderflow.fullname" . }}-config
+  namespace: orderflow            # FLAW HELM-TPL-003: hard-coded namespace. Leave it out (Helm uses the release namespace)
+  labels:
+    {{- include "labels" . | nindent 4 }}
+data:
+  {{- /* FLAW LRN-SEC-004 / LRN-SEC-006 / LRN-SEC-013: credentials (URL password, SMTP_PASSWORD) and sslmode=disable in a ConfigMap. */}}
+  DATABASE_URL: {{ include "orderflow.databaseUrl" . | quote }}
+  ENVIRONMENT: {{ .Values.cluster.environment | quote }}
+  SMTP_HOST: {{ .Values.notifications.smtpHost | quote }}
+  SMTP_PASSWORD: {{ .Values.notifications.smtpPassword | quote }}
+  {{- /* DEMO 7 (.Files + tpl): read files/app.conf from the chart and render the template code inside it. */}}
+  app.conf: |
+    {{- tpl (.Files.Get "files/app.conf") . | nindent 4 }}

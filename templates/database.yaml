@@ -1,0 +1,18 @@
+# Postgres via the CloudNativePG operator (must be installed in the cluster).
+# The Pods view draws the pods the operator creates (orange, dashed) and the API's connection to them.
+# FLAW LRN-PERF-006: 1 instance by default, no backup section, superuser access enabled.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "orderflow.fullname" . }}-db
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.database.instances }}
+  enableSuperuserAccess: true
+  bootstrap:
+    initdb:
+      database: {{ .Values.database.name }}
+      owner: {{ .Values.database.user }}
+  storage:
+    size: {{ .Values.database.storage }}
